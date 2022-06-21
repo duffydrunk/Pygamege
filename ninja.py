@@ -1,104 +1,98 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed May 25 19:44:03 2022
-
-@author: user
-"""
 import pygame
 from defaults import * 
 from projectile import Projectile
+import itertools
 
 
 class Ninja(pygame.sprite.Sprite):
-    def __init__(self,pos, groups, obstacle_sprites):
+    """
+    Class that creates a ninja chracter that can throw projectiles that can reflect from reflective obstacles
+    """
+    def __init__(self,pos, groups, obstacle_sprites, game_speed):
         super().__init__(groups)
-        self.groups = groups
         
         #Take Asset from the source image
         self.image = pygame.image.load("SpriteSheet.png").convert_alpha() #Import image
         self.image = self.image.subsurface([0,0,16,16]) #Take the asset
         self.image = pygame.transform.smoothscale(self.image, (TILESIZE,TILESIZE)) #Scale asset to tile size    
         self.rect = self.image.get_rect(topleft = pos) #Define position of the ninja at the map
+        self.hitbox = self.rect.inflate(-4,-4) #Define hitbox of the ninja
         
         # movement defaults 
-        self.direction = pygame.math.Vector2()
-        self.speed = 5
-        self.shiruken_throwed = False
-        self.shiruken_cd = 400
-        self.shiruken_time = 0
+        self.direction = pygame.math.Vector2() #Define a vector
+        self.speed = game_speed #Define speed
+         
+        self.obstacle_sprites = obstacle_sprites #Define obstacle sprites
         
-        self.obstacle_sprites = obstacle_sprites
+        self.new_pos = self.hitbox.center
+        self.new_destination = False
+        # self.path = None
+        self.final = True
         
-        
-    def keyboard_input(self):
-        keys = pygame.key.get_pressed()
-        
-        # Movement inputs
-        if keys[pygame.K_UP]:
-            self.direction.y = -1
- 
-        elif keys[pygame.K_DOWN]:
-            self.direction.y = 1     
-            
-        else:
-            self.direction.y = 0
- 
-        if keys[pygame.K_RIGHT]:
-            self.direction.x = 1
-
-        elif keys[pygame.K_LEFT]:
-            self.direction.x = -1
-        
-        else:
-            self.direction.x = 0
-
-
-        # Shriruken
-        
-        if keys[pygame.K_SPACE] and not self.shiruken_throwed:
-            print("yes")
-            Projectile((self.rect.x,self.rect.y),[self.groups],self.obstacle_sprites)
-            self.shiruken_throwed = True
-            self.shiruken_time = pygame.time.get_ticks() # Save the shiruken time
-            
-    
-    def cooldown(self):
-        current_time = pygame.time.get_ticks() # Save the current time
-        if self.shiruken_throwed == True:
-            if current_time - self.shiruken_time >= self.shiruken_cd:
-                self.shiruken_throwed = False
     
     def move(self,speed):
-        if self.direction.magnitude() != 0: # Normalize the direction vector if it's not
-            self.direction = self.direction.normalize()
-            
-        self.rect.x += self.direction.x * speed
+        """
+        Function that moves the ninja.
+        """
+        self.hitbox.x += self.direction.x * speed
         self.collision("horizontal")
         
-        self.rect.y += self.direction.y * speed
+        self.hitbox.y += self.direction.y * speed
         self.collision("vertical")
+        self.rect.center = self.hitbox.center
         
-        
+        if self.new_destination:            
+            self.path.pop(0)
+            if self.path:
+                self.new_pos = (self.path[0][1]*TILESIZE+TILESIZE/2,self.path[0][0]*TILESIZE+TILESIZE/2)
+            
+            self.new_destination = False
+
+    
     def collision(self,direction):
+                
+        """
+        Function that checks collision on the x or y axis. If a collision occurs with an obstacle sprite, ninja cannot move towards the collieded obstacle.
+        """
+        
         if direction == 'horizontal':
             for sprite in self.obstacle_sprites:
-                if sprite.rect.colliderect(self.rect):
+                if sprite.hitbox.colliderect(self.hitbox):
                     if self.direction.x > 0: # Ninja moving right 
-                        self.rect.right = sprite.rect.left
+                        self.hitbox.right = sprite.hitbox.left
                     else: # Ninja moving left 
-                        self.rect.left = sprite.rect.right
+                        self.hitbox.left = sprite.hitbox.right
 
         if direction == 'vertical':
             for sprite in self.obstacle_sprites:
-                if sprite.rect.colliderect(self.rect):
+                if sprite.hitbox.colliderect(self.hitbox):
                     if self.direction.y > 0: # Ninja moving right 
-                        self.rect.bottom = sprite.rect.top
+                        self.hitbox.bottom = sprite.hitbox.top
                     else: # Ninja moving left 
-                        self.rect.top = sprite.rect.bottom
+                        self.hitbox.top = sprite.hitbox.bottom
                         
+    def brain_moves(self):
+        if self.path:
+            self.new_pos = (self.path[0][1]*TILESIZE+TILESIZE/2,self.path[0][0]*TILESIZE+TILESIZE/2)
+            ninja_pos = pygame.math.Vector2(self.hitbox.center) #Form ninja position as a vector
+            new_pos = pygame.math.Vector2(self.new_pos) #Form final ninja position as a vector
+            self.direction = (new_pos-ninja_pos) #Find the direction vector between ninja and mouse cursor, and normalize it
+            if self.direction.magnitude() < 3:
+                self.new_destination = True
+            if self.direction.magnitude() > 0: #If there is a vector normalize it
+                self.direction = self.direction.normalize()
+        else:
+            self.direction.x = 0
+            self.direction.y = 0
+            self.final = True
         
     def update(self):
-        self.keyboard_input()
-        self.cooldown()
-        self.move(self.speed)
+        """
+        Update method for the ninja class. 
+        """
+        if not self.final:
+            self.brain_moves()
+            self.move(self.speed)
+        
         

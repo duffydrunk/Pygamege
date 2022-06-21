@@ -1,81 +1,77 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed May 25 20:46:12 2022
-
-@author: user
-"""
-# -*- coding: utf-8 -*-
-"""
-Created on Wed May 25 19:44:03 2022
-
-@author: user
-"""
 import pygame
 from defaults import * 
 import numpy as np
 
-
 class Projectile(pygame.sprite.Sprite):
-    def __init__(self,pos, groups, obstacle_sprites):
+    """
+    Projectile class.
+    """
+    def __init__(self,pos, groups, obstacle_sprites, aim,mirror_sprites, game_speed):
         super().__init__(groups)
         #Take Asset from the source image
+        self.lenght = TILESIZE/4
         self.image = pygame.image.load("Shuriken.png").convert_alpha() #Import image
         self.image = self.image.subsurface([0,0,16,16]) #Take the asset
-        # self.image = pygame.transform.smoothscale(self.image, (TILESIZE,TILESIZE)) #Scale asset to tile size    
+        self.image = pygame.transform.smoothscale(self.image, (self.lenght,self.lenght)) #Scale image to desired size
+
+        self.aim = aim
+        self.rect = self.image.get_rect(center = pos) #Define position of the projectile at the map
+        self.hitbox = self.rect
         
-        
-        # set random direction
-        
-        self.direction = pygame.math.Vector2()
-        v = np.random.rand(2)
-        v = v / np.linalg.norm(v)
-        
-        self.direction.x = v[0] * [1 if np.random.random() < 0.5 else -1][0]
-        self.direction.y = v[1] * [1 if np.random.random() < 0.5 else -1][0]
-        
-        self.rect = self.image.get_rect(topleft = (int(pos[0] + (TILESIZE * self.direction.x)) ,int( pos[1] + ( TILESIZE * self.direction.y)))) #Define position of the ninja at the map
-        self.speed = 5
-        
+        self.speed = game_speed
         self.obstacle_sprites = obstacle_sprites
-        
-    
+        self.mirror_sprites = mirror_sprites
+        self.bounce_number = 0 #Number of bounces that projectile made
+        self.bounce_threshold = 3 #Threshold value for maximum bounce a projectile can make
+        self.track = [[self.rect.center]]  #List that contains points for trajactories of the projectile
+        self.track_line_no = 0 #Current trajactory number, increases if projectile hits a panel
+        self.collided_mirror = None
+
     def move(self,speed):
+        """
+        Function that moves the projectile.
+        """
+        
+        self.direction =  (self.aim-self.hitbox.center)
+        
         if self.direction.magnitude() != 0: # Normalize the direction vector if it's not
             self.direction = self.direction.normalize()
             
-        self.rect.x += self.direction.x * speed
-        self.collision("horizontal")
+        self.hitbox.x += self.direction.x * speed #Move the projectile to it's new x position
+        self.hitbox.y += self.direction.y * speed #Move the projectile to it's new y position
+        self.collision() #Check if collision occured with a panel
+        self.rect.center = self.hitbox.center
         
-        self.rect.y += self.direction.y * speed
-        self.collision("vertical")
+    def collision(self):
         
-        
-    def collision(self,direction):
+        """
+        Function that checks collision on the x or y axis. If a collision occurs, the speed on the particular axis is reversed.
+        """
 
-        if direction == 'horizontal':
-            for sprite in self.obstacle_sprites:
-                if sprite.rect.colliderect(self.rect):
-                    if self.direction.x > 0: # Ninja moving right 
-                        self.rect.right = sprite.rect.left
-                        v = np.random.rand(2)
-                        v = v / np.linalg.norm(v)
-                        self.direction.x *= -1
-
-                    else: # Ninja moving left 
-                        self.rect.left = sprite.rect.right
-                        self.direction.x *= -1
-
-        if direction == 'vertical':
-            for sprite in self.obstacle_sprites:
-                if sprite.rect.colliderect(self.rect):
-                    if self.direction.y > 0: # Ninja moving right 
-                        self.rect.bottom = sprite.rect.top
-                        self.direction.y *= -1
-                    else: # Ninja moving left 
-                        self.rect.top = sprite.rect.bottom
-                        self.direction.y *= -1
-                        
-        
+        for sprite in self.mirror_sprites: #Iterate for every mirror
+            if sprite.hitbox.colliderect(self.hitbox) and self.collided_mirror != sprite : #Check if there is collision
+                 self.track[self.track_line_no].append(self.hitbox.center) #Record the collision point with the mirror
+                 self.aim = sprite.aim #Get the aim position from mirror
+                 self.hitbox.center = sprite.hitbox.center #Record the new center  
+                 self.collided_mirror = sprite #Record last reflected mirror
+                 self.bounce_number += 1
+                 self.track_line_no += 1
+                 self.track.append([self.hitbox.center])
+    
+    def check_bounce_lim(self):
+        """
+        Function that controls the number of bounces of the projectile. When the projectile's bounce count reaches the threshold number, it is killed.
+        """
+        if self.bounce_number > self.bounce_threshold: #If projectile bounces more than the threshold value, kill it
+            self.kill()
+    
+    
     def update(self):
+        """
+        Update method for the projectile class. 
+        """
+
         self.move(self.speed)
+        self.check_bounce_lim()
         
